@@ -1,0 +1,151 @@
+---
+title: "New Units"
+author: "Naren Akurati"
+date: "4/6/2019"
+output: html_document
+---
+
+```{r}
+library(testthat)
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(gridExtra))
+library(class)
+library(ISLR)
+suppressPackageStartupMessages(library(caret))
+library(e1071)
+suppressPackageStartupMessages(library(MASS))
+library(reshape2)
+library(ggcorrplot)
+suppressPackageStartupMessages(library(boot))
+suppressPackageStartupMessages(library(resample))
+library(rpart)
+library(tree)
+suppressPackageStartupMessages(library(randomForest))
+library(rvest)
+library(stringr)
+library(curl)
+library(httr)
+library(rjson)
+library(parsedate)
+library(tcltk2)
+library(ggmap)
+library(pracma)
+library(plotly)
+library(sp)
+library(rgdal)
+library(chron)
+
+rpe <- read.csv("rpe.csv")
+wellness <- read.csv("wellness.csv")
+games <- read.csv("games.csv")
+gps <- read.csv("gps.csv")
+
+#beans <- data.frame("game" = c(2,3,4,5,6,7,8,9,10,11,12,13,17), "energy")
+
+game_one_gps <- gps[which(gps$GameID == 1),]
+unique(game_one_gps$PlayerID)
+
+game_one_gps_player_two <- game_one_gps[which(game_one_gps$PlayerID == 17),]
+
+# xy <- data.frame(ID = 1:2, X = c(118, 119), Y = c(10, 50))
+xy <- data.frame(ID = 1:nrow(game_one_gps_player_two), X = game_one_gps_player_two$Latitude, Y = game_one_gps_player_two$Longitude)
+coordinates(xy) <- c("X", "Y")
+proj4string(xy) <- CRS("+proj=longlat +datum=WGS84")
+res <- spTransform(xy, CRS("+proj=utm +zone=51 ellps=WGS84"))
+
+game_one_gps_player_two$X <- as(res, "SpatialPoints")$X
+game_one_gps_player_two$Y <- as(res, "SpatialPoints")$Y
+
+Zs <- c()
+
+rows <- nrow(game_one_gps_player_two)
+rows <- rows - 1
+
+for (i in 1:rows){
+Zs[i] <- (mean(game_one_gps_player_two$AccelZ[i:i+1]) * (game_one_gps_player_two$X[i+1] - game_one_gps_player_two$X[i]) * (game_one_gps_player_two$Y[i+1] - game_one_gps_player_two$Y[i]))
+}
+
+Zs <- as.data.frame(Zs)
+Zs <- rbind(0,Zs)
+Zs <- Zs$Zs
+
+game_one_gps_player_two$Height <- Zs
+
+#plot_ly(game_one_gps_player_two, x= ~X, y= ~Y, z= ~Height, marker = list(size = 1))
+
+#caclulcate force vector over time
+rows <- nrow(game_one_gps_player_two); rows <- rows - 1
+game_one_gps_player_two$f_x_2 <- c(game_one_gps_player_two$AccelX[1],game_one_gps_player_two$AccelX[1:rows])
+game_one_gps_player_two$f_y_2 <- c(game_one_gps_player_two$AccelY[1],game_one_gps_player_two$AccelY[1:rows])
+game_one_gps_player_two$f_z_2 <- c(game_one_gps_player_two$AccelZ[1],game_one_gps_player_two$AccelZ[1:rows])
+
+# F <- 75 * sqrt((sum(sqrt((game_one_gps_player_two$f_x_2 - game_one_gps_player_two$AccelX)^2)))^2 + (sum(sqrt((game_one_gps_player_two$f_y_2 - game_one_gps_player_two$AccelY)^2)))^2 + (sum(sqrt((game_one_gps_player_two$f_z_2 - game_one_gps_player_two$Height)^2)))^2)
+
+F <- 75 * sum(sqrt((game_one_gps_player_two$f_x_2 - game_one_gps_player_two$AccelX)^2 + (game_one_gps_player_two$f_y_2 - game_one_gps_player_two$AccelY)^2 + (game_one_gps_player_two$f_z_2 - game_one_gps_player_two$AccelZ)^2))
+F_cum <- 75 * cumsum(sqrt((game_one_gps_player_two$f_x_2 - game_one_gps_player_two$AccelX)^2 + (game_one_gps_player_two$f_y_2 - game_one_gps_player_two$AccelY)^2 + (game_one_gps_player_two$f_z_2 - game_one_gps_player_two$AccelZ)^2))
+game_one_gps_player_two$F_cum <- F_cum
+
+#calculating distance over the whole game
+rows <- nrow(game_one_gps_player_two); rows <- rows - 1
+game_one_gps_player_two$x_2 <- c(game_one_gps_player_two$X[1],game_one_gps_player_two$X[1:rows])
+game_one_gps_player_two$y_2 <- c(game_one_gps_player_two$Y[1],game_one_gps_player_two$Y[1:rows])
+game_one_gps_player_two$z_2 <- c(game_one_gps_player_two$Height[1],game_one_gps_player_two$Height[1:rows])
+
+distance <- sum(sqrt((game_one_gps_player_two$x_2 - game_one_gps_player_two$X)^2 + (game_one_gps_player_two$y_2 - game_one_gps_player_two$Y)^2 + (game_one_gps_player_two$z_2 - game_one_gps_player_two$Height)^2))
+distance_cum <- cumsum(sqrt((game_one_gps_player_two$x_2 - game_one_gps_player_two$X)^2 + (game_one_gps_player_two$y_2 - game_one_gps_player_two$Y)^2 + (game_one_gps_player_two$z_2 - game_one_gps_player_two$Height)^2))
+game_one_gps_player_two$distance_cum <- distance_cum
+
+E <- F * distance
+E_cum <- F_cum * distance_cum
+game_one_gps_player_two$total_energy <- E
+game_one_gps_player_two$E_cum <- E_cum
+
+p17 <- game_one_gps_player_two
+# write.csv(MEGA, file = "MEGA")
+# save(MEGA, file="MEGA.RData")
+
+MEGA <- rbind(p2,p3,p4,p6,p7,p8,p9,p10,p11,p12,p13,p17)
+MEGA$E_cum_lef <- 1000000000 - MEGA$E_cum
+MEGA$time <- format(MEGA$GameClock, format = '%Y-%m-%d %M:%H:%S')
+
+#HERE WE GO
+ggplot(MEGA_2, aes(x=new_frame, y=percentage_lef, color = factor(PlayerID))) + geom_point(size=1)
+
+new_frame <- rep(c(1:10730), 11)
+MEGA_2$new_frame <- new_frame
+
+MEGA_2[which(MEGA_2$PlayerID == 3),]
+
+range(MEGA$time)
+min(MEGA$time) - max(MEGA$time)
+
+start <- MEGA[which(MEGA$PlayerID == 2),]$time[5000]
+end <- MEGA[which(MEGA$PlayerID == 2),]$time[10730]
+
+hist(MEGA$E_cum)
+OutVals <- boxplot(MEGA$E_cum, plot=FALSE)$out
+range(OutVals)
+hist(OutVals)
+
+
+MEGA_2 <- MEGA[which(MEGA$PlayerID != 10),]
+
+MEGA[which(MEGA$total_energy > 10e+08),]
+MEGA_2$percentage_lef <- MEGA_2$E_cum_lef/10000000
+
+range(MEGA_2$FrameID)
+
+range(MEGA_2$time)
+
+MEGA_2$time[5000]
+
+5473/2
+
+MEGA_SUB <- MEGA_2[which(MEGA_2$new_frame == 5400),]
+
+ggplot(MEGA_SUB) + geom_point(aes(x=factor(PlayerID), y=percentage_lef))
+
+ggplot(data=MEGA_SUB, aes(x=time, y=total_bill, fill=time)) +
+    geom_bar(stat="identity")
+```

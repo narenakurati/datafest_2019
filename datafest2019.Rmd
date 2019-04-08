@@ -1,0 +1,121 @@
+---
+title: "datafest2019"
+author: "Naren Akurati"
+date: "4/5/2019"
+output: html_document
+---
+
+```{r}
+library(testthat)
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(gridExtra))
+library(class)
+library(ISLR)
+suppressPackageStartupMessages(library(caret))
+library(e1071)
+suppressPackageStartupMessages(library(MASS))
+library(reshape2)
+library(ggcorrplot)
+suppressPackageStartupMessages(library(boot))
+suppressPackageStartupMessages(library(resample))
+library(rpart)
+library(tree)
+suppressPackageStartupMessages(library(randomForest))
+library(rvest)
+library(stringr)
+library(curl)
+library(httr)
+library(rjson)
+library(parsedate)
+library(tcltk2)
+library(ggmap)
+library(pracma)
+library(plotly)
+
+rpe <- read.csv("rpe.csv")
+wellness <- read.csv("wellness.csv")
+games <- read.csv("games.csv")
+gps <- read.csv("gps.csv")
+
+#testing converting to UTM units
+
+
+#editing rpe
+new <- na.omit(rpe)
+rpe_new <- rpe[,1:7]
+
+rpe_new <- na.omit(rpe_new)
+
+#creating performance metric
+non_zero_speed <- gps[which(gps$Speed != 0),]
+
+mean_speed_non_zero <- non_zero_speed %>% group_by(GameID, PlayerID) %>% summarise(mean(Speed))
+mean_speed_non_zero <- as.data.frame(mean_speed_non_zero)
+
+# mean_speed <- gps %>% group_by(GameID, PlayerID) %>% summarise(mean(Speed))
+# mean_speed <- as.data.frame(mean_speed)
+
+player_two <- mean_speed_non_zero[which(mean_speed_non_zero$PlayerID == 2),]
+hist(player_two$`mean(Speed)`)
+
+#player two game one
+game_one_gps <- gps[which(gps$GameID == 1),]
+game_one_gps_player_two <- game_one_gps[which(game_one_gps$PlayerID == 2),]
+
+ggplot() + geom_point(data=game_one_gps_player_two, aes(x=Latitude, y=Longitude, color="red"))
+
+#acceleration plot
+ggplot(data=game_one_gps_player_two, aes(x=GameClock, y=AccelX))
+plot_ly(game_one_gps_player_two, x=~GameClock, y=~AccelX, z=~AccelY, marker = list(size = 1))
+
+mean(game_one_gps_player_two$AccelZ[1:2])
+
+#integrating for accel
+game_one_gps_player_two$Latitude[1:2]
+mean(game_one_gps_player_two$AccelZ[1:2])
+
+# integral2(mean(game_one_gps_player_two$AccelZ[1:2]), 
+#           game_one_gps_player_two$Latitude[1],
+#           game_one_gps_player_two$Latitude[2],
+#           game_one_gps_player_two$Longitude[1],
+#           game_one_gps_player_two$Longitude[2]
+#           )
+
+Zs <- c()
+
+for (i in 1:10729){
+Zs[i] <- (mean(game_one_gps_player_two$AccelZ[i:i+1]) * (game_one_gps_player_two$Latitude[i+1] - game_one_gps_player_two$Latitude[i]) * (game_one_gps_player_two$Longitude[i+1] - game_one_gps_player_two$Longitude[i]))
+}
+
+Zs <- as.data.frame(Zs)
+Zs <- rbind(0,Zs)
+Zs <- Zs$Zs*100000
+
+game_one_gps_player_two$Height <- Zs
+
+plot_ly(game_one_gps_player_two, x=~Latitude, y=~Longitude, z=~Height, marker = list(size = 2))
+
+(max(game_one_gps_player_two$Longitude) - min(game_one_gps_player_two$Longitude))/max(game_one_gps_player_two$Height)
+
+# (
+# mean(game_one_gps_player_two$AccelZ[1:2])
+#   * (game_one_gps_player_two$Latitude[2] - game_one_gps_player_two$Latitude[1])
+#   * (game_one_gps_player_two$Longitude[2] - game_one_gps_player_two$Longitude[1])
+# )
+
+#calculating energy over the whole game
+F <- 75 * sum(abs(game_one_gps_player_two$AccelX)) + sum(abs(game_one_gps_player_two$AccelY)) + sum(abs(game_one_gps_player_two$AccelZ))
+
+#calculating distance over the whole game
+rows <- nrow(game_one_gps_player_two); rows <- rows - 1
+game_one_gps_player_two$x_2 <- c(0,game_one_gps_player_two$Latitude[1:rows])
+game_one_gps_player_two$y_2 <- c(0,game_one_gps_player_two$Longitude[1:rows])
+game_one_gps_player_two$z_2 <- c(0,game_one_gps_player_two$Height[1:rows])
+
+distance <- sum(sqrt((game_one_gps_player_two$x_2 - game_one_gps_player_two$Latitude)^2 + (game_one_gps_player_two$y_2 - game_one_gps_player_two$Longitude)^2 + (game_one_gps_player_two$z_2 - game_one_gps_player_two$Height)^2))
+
+E <- F * distance
+E
+
+```
